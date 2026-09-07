@@ -319,7 +319,7 @@ export function analyzeMessage(text: string): AnalysisResult {
 
   const families = new Set(hits.map((h) => h.id));
   const pressure = ["urgency", "threat", "secrecy"].some((f) => families.has(f));
-  const action = ["credential", "collectreq", "moneyask", "link"].some((f) => families.has(f));
+  const action = ["credential", "collectreq", "moneyask", "link", "channel"].some((f) => families.has(f));
   const pretext = ["authority", "refundlure"].some((f) => families.has(f));
   if (pressure && action) raw += 14; // coercion + action = classic scam shape
   if (pretext && action) raw += 10;
