@@ -5,9 +5,8 @@ const COLOR: Record<RiskBand, string> = {
   safe: "var(--safe)",
   caution: "var(--caution)",
   suspicious: "var(--suspicious)",
-  danger: "var(--danger)",
   high: "var(--danger)",
-} as Record<RiskBand, string>;
+};
 
 export function ThreatMeter({ score, band }: { score: number; band: RiskBand }) {
   const angle = (score / 100) * 180 - 90;
