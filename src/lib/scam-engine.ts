@@ -21,11 +21,11 @@ export interface SignalHit {
 
 export interface UpiIntent {
   raw: string;
-  pa?: string; // payee address (VPA)
-  pn?: string; // payee name
-  am?: string; // amount
-  tn?: string; // transaction note
-  mc?: string; // merchant code
+  pa?: string | undefined; // payee address (VPA)
+  pn?: string | undefined; // payee name
+  am?: string | undefined; // amount
+  tn?: string | undefined; // transaction note
+  mc?: string | undefined; // merchant code
   flags: string[];
 }
 

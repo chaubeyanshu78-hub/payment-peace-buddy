@@ -164,7 +164,7 @@ function Slides() {
     return () => window.removeEventListener("keydown", h);
   }, [next, prev]);
 
-  const s = SLIDES[i];
+  const s = SLIDES[i] ?? SLIDES[0]!;
 
   return (
     <div className="min-h-screen bg-hero">
