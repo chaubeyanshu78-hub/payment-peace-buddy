@@ -198,7 +198,7 @@ function Docs() {
 raw      = Σ  weight_i × 0.82^i          // diminishing returns
 
 pressure = urgency | threat | secrecy
-action   = credential | collect | money | link
+action   = credential | collect | money | link | off-channel
 pretext  = authority | refund lure
 
 raw += 14  if pressure AND action        // coercion + action
@@ -206,7 +206,8 @@ raw += 10  if pretext  AND action        // fake reason + action
 raw +=  8  if all three                  // full scam shape
 raw  = max(raw, 78) if credential        // PIN/OTP ask = always high
 raw += 12  if a upi:// intent has 2+ red flags
-raw -= 12  per genuine-transaction pattern (bank debit alert format)
+raw -= 18  per genuine-transaction marker (bank debit alert format)
+raw  = min(raw, 12) if 2+ genuine markers and no pressure/pretext
 
 score = clamp(round(raw), 0, 100)
 band  = 0–19 Safe · 20–44 Caution · 45–69 Suspicious · 70–100 High Risk`}</Code>
