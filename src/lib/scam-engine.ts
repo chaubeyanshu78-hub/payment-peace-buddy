@@ -88,7 +88,7 @@ export const SIGNALS: SignalDef[] = [
       hi: "भेजने वाला बिजली विभाग, बैंक, KYC अधिकारी, पुलिस या सरकारी संस्था होने का दावा करता है, पर कोई पहचान सत्यापित नहीं है।",
     },
     patterns: [
-      /\b(electricity (board|department|bill)|bijli|power (board|department)|bank (officer|manager|executive)|RBI|SBI|HDFC|ICICI|Axis|Paytm|PhonePe|GPay|Google Pay|KYC (update|officer|team)|income tax|customs|police|cyber cell|court|TRAI|EPFO|Aadhaar|UIDAI|gas agency|LPG)\b/gi,
+      /\b(electricity (board|department|bill|connection)|bijli|power (board|department)|bank (officer|manager|executive)|RBI|SBI|HDFC|ICICI|Axis|Paytm|PhonePe|GPay|Google Pay|KYC (update|officer|team)|income tax|customs|police|cyber cell|court|TRAI|EPFO|Aadhaar|UIDAI|gas agency|LPG)\b/gi,
       /(बिजली विभाग|बिजली बिल|बैंक अधिकारी|केवाईसी|आधार|पुलिस|आयकर)/g,
     ],
   },
@@ -144,7 +144,8 @@ export const SIGNALS: SignalDef[] = [
     },
     patterns: [
       /\b(anydesk|teamviewer|quick ?support|rustdesk|screen shar(e|ing)|install (this )?app|apk|download the app)\b/gi,
-      /\b(whatsapp (me|karo|kare|par)|call (me )?(on|at)?\s*(\+?91)?[6-9]\d{9})\b/gi,
+      /\b(whatsapp (me|karo|kare|par))\b/gi,
+      /\b(call|contact|dial|sampark)\b[^.\n]{0,30}(\+?91[\s-]?)?[6-9]\d{9}\b/gi,
       /(व्हाट्सएप|कॉल करें)/g,
     ],
   },
@@ -203,10 +204,14 @@ export const SIGNALS: SignalDef[] = [
 
 /* Signals that neutralise risk (legit-looking transactional confirmations) */
 const SAFE_PATTERNS: RegExp[] = [
-  /\b(debited|credited) (from|to) (a\/c|account)\b.*\b(ref|upi|txn)\b/gi,
+  /\b(debited|credited)\b[^.]{0,60}\b(a\/c|account|acct)\b/gi,
+  /\b(upi\s*ref|txn\s*(id|no)|ref\s*no)\b[\s:]*\d{6,}/gi,
   /\b(thank you for (your )?(payment|order))\b/gi,
-  /\bdo not share (your )?(otp|pin)\b.*\bwith anyone\b/gi,
 ];
+
+/** Safety advisories such as "never share your OTP" must not count as a request. */
+const NEGATED_CREDENTIAL =
+  /\b(do ?n['o]?t|never|no one|nobody|kabhi (mat|nahi))\b[^.\n]{0,40}\b(share|shar(e|ing)|batao|bataye|disclose|reveal)\b[^.\n]{0,40}/gi;
 
 /* ------------------------------------------------------------------ */
 /* UPI intent parsing                                                  */
@@ -268,12 +273,14 @@ export const BAND_LABEL: Record<RiskBand, { en: string; hi: string }> = {
 
 export function analyzeMessage(text: string): AnalysisResult {
   const clean = text.trim();
+  // Strip anti-fraud advisories so "do not share your OTP" is not read as an OTP request.
+  const scanText = clean.replace(NEGATED_CREDENTIAL, " ");
   const hits: SignalHit[] = [];
 
   for (const s of SIGNALS) {
     const matches = new Set<string>();
     for (const p of s.patterns) {
-      const m = clean.match(new RegExp(p.source, p.flags));
+      const m = scanText.match(new RegExp(p.source, p.flags));
       if (m) m.slice(0, 4).forEach((x) => matches.add(x.trim()));
     }
     if (matches.size > 0) {
@@ -288,6 +295,20 @@ export function analyzeMessage(text: string): AnalysisResult {
   }
 
   const intents = parseUpiIntents(clean);
+  if (intents.some((i) => /^upi:\/\/collect/i.test(i.raw)) && !hits.some((h) => h.id === "collectreq")) {
+    const def = SIGNALS.find((x) => x.id === "collectreq")!;
+    hits.push({
+      id: def.id,
+      label: def.label,
+      why: def.why,
+      weight: def.weight,
+      matches: ["upi://collect"],
+    });
+  }
+  if (intents.length > 0 && !hits.some((h) => h.id === "moneyask")) {
+    const def = SIGNALS.find((x) => x.id === "moneyask")!;
+    hits.push({ id: def.id, label: def.label, why: def.why, weight: def.weight, matches: ["upi:// payment intent"] });
+  }
 
   // Weighted sum with diminishing returns, plus co-occurrence bonus.
   const sorted = [...hits].sort((a, b) => b.weight - a.weight);
@@ -306,7 +327,11 @@ export function analyzeMessage(text: string): AnalysisResult {
   if (families.has("credential")) raw = Math.max(raw, 78); // hard floor
   if (intents.some((i) => i.flags.length >= 2)) raw += 12;
 
-  for (const sp of SAFE_PATTERNS) if (sp.test(clean)) raw -= 12;
+  let safeMarkers = 0;
+  for (const sp of SAFE_PATTERNS) if (new RegExp(sp.source, sp.flags).test(clean)) safeMarkers++;
+  raw -= safeMarkers * 18;
+  // A properly formatted bank alert with no pressure signals is a transaction receipt.
+  if (safeMarkers >= 2 && !pressure && !pretext) raw = Math.min(raw, 12);
   if (clean.length < 12) raw = Math.min(raw, 15);
 
   const score = Math.max(0, Math.min(100, Math.round(raw)));
